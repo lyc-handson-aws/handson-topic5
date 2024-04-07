@@ -1,0 +1,327 @@
+AWSTemplateFormatVersion: 2010-09-09
+
+## =================== DESCRIPTION =================== ##
+Description: >-
+  A Cloudformation Stack for building a container service hosting a docker container who connect to Postgres database.
+    - Amazon RDS 
+    - Amazon Elastic Container Service
+    - AWS Secrets Manager
+    - AWS IAM Role
+  Before stack is launched, user need to, if image used is not redmine
+     1. modify the container's mapping port configution
+     2. update/add env vars for the container
+     3. change names/configuration using 'redmine'
+     4. add other necessary container's configuration specific to used image's need 
+     5. other necessary db's configuration specific to used image's need 
+  After stack is launched and finished,User need to :
+   1. go to the task's configuration page of service created in ECS Cluster
+   2. click on public ip to check the service inside the container with ECS service
+
+## ===================== METADATA ===================== ##
+Metadata:
+  'AWS::CloudFormation::Interface':
+    ParameterGroups:
+      - Label:
+          default: Tag parameters for all tagable resources
+        Parameters:
+          - paramUniqueTagName
+          - paramUniqueTagValue
+      - Label:
+          default: VPC params for the task of a ECS service
+        Parameters:
+          - paramSecurityGroupIds
+          - paramSubnetIds
+      - Label:
+          default: RDS Postgres parameters
+        Parameters:
+          - paramPostgrepwd
+      - Label:
+          default: Docker image name parameters
+        Parameters:
+          - paramImageName
+
+## ==================== PARAMETERS ==================== ##
+Parameters:
+  paramUniqueTagName:
+    Type: String
+    Default: 'yuanchao-handson-tag'
+    Description: unique tag for all resources defined in this stack Cloudformation
+  paramUniqueTagValue:
+    Type: String
+    Description: unique tag's value
+  paramSecurityGroupIds:
+    Type: CommaDelimitedList
+    Description: Comma separated list of existing Security Group Ids for ECR.
+  paramSubnetIds:
+    Type: CommaDelimitedList
+    Description: Comma separated list of existing VPC Subnet Ids for ECR
+  paramPostgrepwd:
+    Description: Postgrepwd
+    Type: String
+  paramImageName:
+    Description: A ECR image name or A public docker image name
+    Type: String
+
+## ==================== MAPPINGS ==================== ##
+#Mappings:
+
+
+
+## ==================== CONDITIONS ==================== ##
+# Conditions:
+
+## =================== RESOURCES =================== ##
+Resources:
+
+  myECSCluster:
+    Type: AWS::ECS::Cluster
+    Properties:
+      ClusterName: !Join
+        - '-'
+        - - 'ecs'
+          - !Ref paramUniqueTagValue
+      CapacityProviders:
+       - FARGATE
+       - FARGATE_SPOT
+      ClusterSettings:
+      - Name: containerInsights
+        Value: enabled
+      Configuration:
+        ExecuteCommandConfiguration:
+          Logging: DEFAULT
+      ServiceConnectDefaults:
+        Namespace: !Sub
+            - "ecsns-${ClusterName}"
+            - ClusterName: !Ref paramUniqueTagValue
+      Tags:
+        - Key: !Ref paramUniqueTagName
+          Value: !Ref paramUniqueTagValue
+  
+
+  myECSECRRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub 'role-${paramUniqueTagValue}-ECSECR'
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ec2.amazonaws.com
+            Action: 
+             - 'sts:AssumeRole'
+      ManagedPolicyArns:
+         - 'arn:aws:iam::aws:policy/service-role/AmazonEC2ContainerServiceforEC2Role'
+  
+  MyECSECRInstanceProfile: 
+    Type: "AWS::IAM::InstanceProfile"
+    Properties: 
+      InstanceProfileName: !Sub 'role-${paramUniqueTagValue}-InstanceProfile-ECSECR'
+      Path: "/"
+      Roles: 
+        - !Ref myECSECRRole 
+
+  myRDSOptionGroup:
+    Type: "AWS::RDS::OptionGroup"
+    Properties:
+      OptionGroupDescription: "Default option group for postgres 16"
+      OptionConfigurations: []
+      MajorEngineVersion: "16"
+      EngineName: "postgres"
+      Tags:
+      - Key: !Ref paramUniqueTagName
+        Value: !Ref paramUniqueTagValue
+
+
+  myRDSRole:
+    Type: "AWS::IAM::Role"
+    Properties:
+      RoleName: !Sub 'role-${paramUniqueTagValue}-RDS'
+      Path: "/"
+      ManagedPolicyArns:
+      - "arn:aws:iam::aws:policy/service-role/AmazonRDSEnhancedMonitoringRole"
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+        - Action: "sts:AssumeRole"
+          Effect: "Allow"
+          Principal:
+            Service: "monitoring.rds.amazonaws.com"
+
+  MyRDSSecret:
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      Name: !Sub 'secret-${paramUniqueTagValue}'
+      Description: Store RDS Posgres masteruser password
+      SecretString: !Sub '{"Postgrepwd":"${paramPostgrepwd}"}'
+      Tags:
+      - Key: !Ref paramUniqueTagName
+        Value: !Ref paramUniqueTagValue
+
+  myDBSubnetGroup: 
+    Type: "AWS::RDS::DBSubnetGroup"
+    Properties: 
+      DBSubnetGroupDescription: !Sub 'DBSubnetGroup-${paramUniqueTagValue}-defaultvpc'
+      DBSubnetGroupName: !Sub 'DBSubnetGroup-${paramUniqueTagValue}-defaultvpc'
+      SubnetIds: !Ref paramSubnetIds
+      Tags:
+      - Key: !Ref paramUniqueTagName
+        Value: !Ref paramUniqueTagValue
+
+  myRDSDBInstance:
+    Type: "AWS::RDS::DBInstance"
+    Properties:
+      StorageEncrypted: false
+      MonitoringRoleArn: !GetAtt myRDSRole.Arn
+      AssociatedRoles: []
+      CertificateDetails: {}
+      ProcessorFeatures: []
+      StorageThroughput: 0
+      PreferredBackupWindow: "10:59-11:29"
+      MonitoringInterval: 60
+      DBParameterGroupName: "default.postgres16"
+      Endpoint: {}
+      NetworkType: "IPV4"
+      DedicatedLogVolume: false
+      CopyTagsToSnapshot: true
+      MultiAZ: false
+      Engine: "postgres"
+      LicenseModel: "postgresql-license"
+      EngineVersion: "16.1"
+      StorageType: "gp2"
+      DBInstanceClass: "db.t3.micro"
+      AvailabilityZone: "eu-west-3c"
+      OptionGroupName: !Ref myRDSOptionGroup
+      PreferredMaintenanceWindow: "fri:00:12-fri:00:42"
+      EnablePerformanceInsights: false
+      AutoMinorVersionUpgrade: true
+      VPCSecurityGroups: !Ref paramSecurityGroupIds
+      DBSubnetGroupName: !Ref myDBSubnetGroup
+      DeletionProtection: false
+      DBInstanceIdentifier: !Sub 'database-${paramUniqueTagValue}'
+      AllocatedStorage: "20"
+      CACertificateIdentifier: "rds-ca-rsa2048-g1"
+      ManageMasterUserPassword: false
+      MasterUsername: "postgres"
+      MasterUserPassword: !Sub "{{resolve:secretsmanager:${MyRDSSecret}::Postgrepwd}}"
+      EnableIAMDatabaseAuthentication: false
+      MaxAllocatedStorage: 1000
+      BackupRetentionPeriod: 7
+      PubliclyAccessible: false
+      EnableCloudwatchLogsExports: []
+      Tags:
+      - Key: !Ref paramUniqueTagName
+        Value: !Ref paramUniqueTagValue
+
+  myTaskDefinitionRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      RoleName: !Sub 'role-${paramUniqueTagValue}-ECSTD'
+      AssumeRolePolicyDocument:
+        Version: "2012-10-17"
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service:
+                - ecs-tasks.amazonaws.com
+            Action: 
+             - 'sts:AssumeRole'
+      Policies:
+        - PolicyName: !Sub 'policy-${paramUniqueTagValue}-taskdefinition'
+          PolicyDocument:
+            Version: "2012-10-17"
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "secretsmanager:GetSecretValue"
+                Resource:
+                 - !Ref MyRDSSecret
+      ManagedPolicyArns:
+         - 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
+
+
+  myECSTaskDefinition:
+    Type: "AWS::ECS::TaskDefinition"
+    Properties:
+      ExecutionRoleArn: !GetAtt myTaskDefinitionRole.Arn
+      RuntimePlatform:
+        OperatingSystemFamily: "LINUX"
+        CpuArchitecture: "X86_64"
+      Memory: "2048"
+      Cpu: "1024"
+      Family: !Sub 'ecstd-family-${paramUniqueTagValue}'
+      NetworkMode: "awsvpc"
+      RequiresCompatibilities:
+      - "FARGATE"
+      ContainerDefinitions:
+      - Secrets: 
+         - name: "REDMINE_DB_PASSWORD"
+           valueFrom: !Ref MyRDSSecret
+        Environment: 
+         - name: "REDMINE_DB_POSTGRES"
+           value: !GetAtt myRDSDBInstance.Endpoint.Address
+         - name: "REDMINE_DB_USERNAME"
+           value: postgres
+        Memory: 1024
+        MemoryReservation: 1024
+        Cpu: 512
+        Image: !Ref paramImageName
+        Name: !Sub 'redmine-${paramUniqueTagValue}'
+        Essential: true
+        LogConfiguration:
+          SecretOptions: []
+          Options:
+            awslogs-group: !Sub 'cw-ecs-${paramUniqueTagValue}-redmine'
+            awslogs-create-group: "true"
+            awslogs-region: !Ref "AWS::Region"
+            awslogs-stream-prefix: "ecs"
+          LogDriver: "awslogs"
+        PortMappings:
+        - ContainerPort: 3000
+          AppProtocol: "http"
+          Protocol: "tcp"
+          Name: "redmine-3000-tcp"
+      Tags:
+      - Key: !Ref paramUniqueTagName
+        Value: !Ref paramUniqueTagValue
+
+  ECSService:
+    Type: AWS::ECS::Service
+    Properties:
+      Cluster: !Ref myECSCluster
+      CapacityProviderStrategy:
+      - CapacityProvider: FARGATE
+        Base: 0
+        Weight: 1
+      TaskDefinition: !Ref myECSTaskDefinition
+      ServiceName: !Sub 'ecsservice-${paramUniqueTagValue}'
+      SchedulingStrategy: REPLICA
+      DesiredCount: 1
+      NetworkConfiguration:
+        AwsvpcConfiguration:
+          AssignPublicIp: ENABLED
+          SecurityGroups: !Ref paramSecurityGroupIds
+          Subnets: !Ref paramSubnetIds
+      PlatformVersion: LATEST
+      DeploymentConfiguration:
+        MaximumPercent: 200
+        MinimumHealthyPercent: 100
+        DeploymentCircuitBreaker:
+          Enable: true
+          Rollback: true
+      DeploymentController:
+        Type: ECS
+      EnableECSManagedTags: true
+      Tags:
+      - Key: !Ref paramUniqueTagName
+        Value: !Ref paramUniqueTagValue
+
+
+
+## ======================= OUTPUT ====================== ##
+#Outputs:
+#  OutputECRRepoUri:
+#    Description: The URI for the ECR repo
+#    Value: !GetAtt MyECRRepo.RepositoryUri
+
