@@ -1,8 +1,7 @@
-# Topic 5 - Docker image website(service) with Database connection
+# Topic 5 - Docker container website(service) using Database(ECS+FARGATE+RDS)
+##  Yuanchao Hands-on Project
 
-## Yuanchao Hands-on Project
-
-## **This readme is more readable**  [here](https://github.com/lyc-handson-aws/handson-topic5)
+## This readme is more readable [here](https://github.com/lyc-handson-aws/handson-topic5)
 
 ## **Overview** 
 
