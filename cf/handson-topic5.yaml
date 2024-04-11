@@ -149,16 +149,6 @@ Resources:
           Principal:
             Service: "monitoring.rds.amazonaws.com"
 
-  MyRDSSecret:
-    Type: 'AWS::SecretsManager::Secret'
-    Properties:
-      Name: !Sub 'secret-${paramUniqueTagValue}'
-      Description: Store RDS Posgres masteruser password
-      SecretString: !Sub '{"Postgrepwd":"${paramPostgrepwd}"}'
-      Tags:
-      - Key: !Ref paramUniqueTagName
-        Value: !Ref paramUniqueTagValue
-
   myDBSubnetGroup: 
     Type: "AWS::RDS::DBSubnetGroup"
     Properties: 
@@ -241,6 +231,16 @@ Resources:
          - 'arn:aws:iam::aws:policy/service-role/AmazonECSTaskExecutionRolePolicy'
 
 
+  MyRDSSecret:
+    Type: 'AWS::SecretsManager::Secret'
+    Properties:
+      Name: !Sub 'secret-${paramUniqueTagValue}'
+      Description: Store RDS Posgres masteruser password
+      SecretString: !Sub '{"Postgrepwd":"${paramPostgrepwd}"}'
+      Tags:
+      - Key: !Ref paramUniqueTagName
+        Value: !Ref paramUniqueTagValue
+
   myECSTaskDefinition:
     Type: "AWS::ECS::TaskDefinition"
     Properties:
@@ -257,7 +257,7 @@ Resources:
       ContainerDefinitions:
       - Secrets: 
          - name: "REDMINE_DB_PASSWORD"
-           valueFrom: !Ref MyRDSSecret
+           valueFrom: !Sub "{{resolve:secretsmanager:${MyRDSSecret}::Postgrepwd}}"
         Environment: 
          - name: "REDMINE_DB_POSTGRES"
            value: !GetAtt myRDSDBInstance.Endpoint.Address
