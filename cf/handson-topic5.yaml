@@ -255,7 +255,7 @@ Resources:
       RequiresCompatibilities:
       - "FARGATE"
       ContainerDefinitions:
-        Environment: 
+      - Environment: 
          - name: "REDMINE_DB_PASSWORD"
            value: !Sub "{{resolve:secretsmanager:${MyRDSSecret}::Postgrepwd}}"
          - name: "REDMINE_DB_POSTGRES"

@@ -15,6 +15,13 @@
 
 :point_right: about [Redmine](https://www.redmine.org/)
 
+## **what could be leaned in this topic**
+
+1. how to create a ECS Cluster with Fargate as capacity provider
+2. how to create a RDS database instance with Postgres engine
+3. how to run a container on ECS Cluster using service(runtime configuration) which is public IP assigned to view the website(service)
+4. how to define a taskdefinition(for container's definition: cpu,mem,env,image...)
+
 ## **Architecture**
 
 the diagram below illustrates the architecture(principle) of this project:
@@ -25,7 +32,7 @@ the diagram below illustrates the architecture(principle) of this project:
 
 ## Continue Deployment
 
-CloudFormation stack's deployment: see GitHub workflows https://github.com/lyc-handson-aws/handson-topic5/blob/main/.github/workflows/action-cf.yaml
+CloudFormation stack's deployment: see GitHub workflows https://github.com/lyc-handson-aws/handson-topic5/blob/master/.github/workflows/action-cf.yaml
 
 ## **CloudFormation Stack Quick-create Link**
 
